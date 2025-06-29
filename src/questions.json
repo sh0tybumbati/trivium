@@ -1,0 +1,37 @@
+[
+  {
+    "category": "Science",
+    "question": "What is the chemical symbol for gold?",
+    "options": ["Au", "Ag", "Go", "Gd"],
+    "answer": "Au",
+    "explanation": "Gold's chemical symbol 'Au' comes from the Latin word 'aurum'."
+  },
+  {
+    "category": "Geography",
+    "question": "Which country has the most time zones?",
+    "options": ["Russia", "United States", "China", "France"],
+    "answer": "France",
+    "explanation": "France has 12 time zones due to its overseas territories, more than any other country."
+  },
+  {
+    "category": "History",
+    "question": "In which year did the Berlin Wall fall?",
+    "options": ["1987", "1989", "1991", "1993"],
+    "answer": "1989",
+    "explanation": "The Berlin Wall fell on November 9, 1989, marking the beginning of German reunification."
+  },
+  {
+    "category": "Sports",
+    "question": "How many players are on a basketball team on the court at one time?",
+    "options": ["4", "5", "6", "7"],
+    "answer": "5",
+    "explanation": "Each basketball team has 5 players on the court: point guard, shooting guard, small forward, power forward, and center."
+  },
+  {
+    "category": "Entertainment",
+    "question": "Which movie won the Academy Award for Best Picture in 2020?",
+    "options": ["1917", "Joker", "Parasite", "Once Upon a Time in Hollywood"],
+    "answer": "Parasite",
+    "explanation": "Parasite made history as the first non-English language film to win Best Picture."
+  }
+]
