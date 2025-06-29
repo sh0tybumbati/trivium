@@ -53,7 +53,15 @@ class WebSocketService {
   private getWebSocketUrl(): string {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.hostname;
-    return `${protocol}//${host}:3001`;
+    const isProduction = host !== 'localhost' && host !== '127.0.0.1';
+    
+    if (isProduction) {
+      // Production: same domain as frontend
+      return `${protocol}//${window.location.host}`;
+    } else {
+      // Development: backend on port 3001
+      return `${protocol}//${host}:3001`;
+    }
   }
 
   connect(): void {

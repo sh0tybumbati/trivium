@@ -41,9 +41,18 @@ class ApiService {
   private baseUrl: string;
 
   constructor() {
-    // Point to backend server on port 3001
+    // In production (like Render), backend serves frontend from same domain
+    // In development, backend runs on port 3001
     const host = window.location.hostname;
-    this.baseUrl = `${window.location.protocol}//${host}:3001/api`;
+    const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+    
+    if (isProduction) {
+      // Production: same domain as frontend
+      this.baseUrl = `${window.location.protocol}//${window.location.host}/api`;
+    } else {
+      // Development: backend on port 3001
+      this.baseUrl = `${window.location.protocol}//${host}:3001/api`;
+    }
   }
 
   // Questions API
@@ -226,6 +235,15 @@ class ApiService {
     const response = await fetch(`${this.baseUrl}/health`);
     if (!response.ok) {
       throw new Error('Failed to check server health');
+    }
+    return response.json();
+  }
+
+  // Network information for QR code generation
+  async getNetworkInfo(): Promise<any> {
+    const response = await fetch(`${this.baseUrl}/network`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch network information');
     }
     return response.json();
   }

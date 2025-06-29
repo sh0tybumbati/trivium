@@ -1,16 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Play, Trophy, Plus, Edit, Trash2, Download, Upload, Monitor, UserCog, Tv } from 'lucide-react';
 import useNetworkedGame from './hooks/useNetworkedGame';
 import ConnectionStatus from './components/ConnectionStatus';
+import QRCodeDisplay from './components/QRCodeDisplay';
 import websocketService from './services/websocket';
+import apiService from './services/api';
 import type { Question } from './services/api';
 
-type AppMode = 'landing' | 'bigscreen' | 'host';
+type AppMode = 'main' | 'landing' | 'bigscreen' | 'host' | 'guest';
 
 const TriviaApp = () => {
-  const [appMode, setAppMode] = useState<AppMode>('landing');
+  // Check URL parameters to determine initial mode
+  const getInitialMode = (): AppMode => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const mode = urlParams.get('mode');
+    if (mode === 'guest') return 'guest';
+    return 'main';
+  };
+
+  const [appMode, setAppMode] = useState<AppMode>(getInitialMode());
   const [adminMode, setAdminMode] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<(Question & { id?: number }) | null>(null);
+  const [networkInfo, setNetworkInfo] = useState<any>(null);
   const [newQuestion, setNewQuestion] = useState<Omit<Question, 'id'>>({
     category: '',
     question: '',
@@ -47,6 +58,42 @@ const TriviaApp = () => {
   // Ensure we have safe defaults
   const safeQuestions = questions || [];
   const safeCategories = getAvailableCategories ? getAvailableCategories() : [];
+
+  // Fetch network information on mount
+  useEffect(() => {
+    const fetchNetworkInfo = async () => {
+      try {
+        const info = await apiService.getNetworkInfo();
+        setNetworkInfo(info);
+        console.log('Network info fetched:', info);
+      } catch (error) {
+        console.error('Failed to fetch network info:', error);
+      }
+    };
+
+    fetchNetworkInfo();
+  }, []);
+
+  // Generate URL for guest mode with network IP
+  const getGuestUrl = () => {
+    const currentHost = window.location.hostname;
+    const currentPort = window.location.port;
+    const protocol = window.location.protocol;
+    
+    // If we have network info from the server, use that
+    if (networkInfo && networkInfo.networkIP && networkInfo.networkIP !== 'localhost') {
+      const port = currentPort || '5173';
+      return `${protocol}//${networkInfo.networkIP}:${port}?mode=guest`;
+    }
+    
+    // If we're already on a network IP (not localhost), use current URL
+    if (currentHost !== 'localhost' && currentHost !== '127.0.0.1') {
+      return `${window.location.origin}?mode=guest`;
+    }
+    
+    // Fallback to current URL if network info isn't available yet
+    return `${window.location.origin}?mode=guest`;
+  };
   
   // Debug logging
   console.log('TriviaApp render:', { 
@@ -152,7 +199,8 @@ const TriviaApp = () => {
         timed_rounds: gameState.timedRounds,
         time_limit: gameState.timeLimit,
         question_limit: gameState.questionLimit,
-        selected_categories: gameState.selectedCategories
+        selected_categories: gameState.selectedCategories,
+        player_mode: gameState.playerMode
       };
       
       const mergedSettings = { ...currentSettings, ...updates };
@@ -175,6 +223,65 @@ const TriviaApp = () => {
         <div className="text-center">
           <div className="animate-spin w-16 h-16 border-4 border-amber-300 border-t-transparent rounded-full mx-auto mb-4"></div>
           <div>Connecting to server...</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Main Entry Screen - Host or Guest Selection
+  if (appMode === 'main') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-amber-900 flex items-center justify-center p-8 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-amber-100/5 via-transparent to-emerald-900/10"></div>
+        <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-400"></div>
+        
+        {/* Connection Status */}
+        <div className="absolute top-4 right-4">
+          <ConnectionStatus isConnected={isConnected} error={error} />
+        </div>
+
+        <div className="text-center text-white max-w-4xl relative z-10">
+          <div className="mb-16">
+            <Trophy className="w-40 h-40 mx-auto mb-8 text-amber-300 drop-shadow-2xl" />
+            <h1 className="text-8xl font-bold mb-6 bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-400 bg-clip-text text-transparent drop-shadow-2xl">
+              TRIVIA NIGHT
+            </h1>
+            <p className="text-4xl text-amber-100 mb-16 font-light tracking-wide">Choose Your Role</p>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-12 max-w-4xl mx-auto">
+            {/* Host Option */}
+            <div className="bg-black/40 backdrop-blur-lg rounded-3xl p-12 border-2 border-amber-400/30 shadow-2xl relative hover:border-amber-400/50 transition-all duration-300 transform hover:scale-105">
+              <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-amber-400 rotate-45"></div>
+              <UserCog className="w-20 h-20 mx-auto mb-6 text-amber-300" />
+              <h2 className="text-4xl font-bold mb-6 text-amber-100">Host</h2>
+              <p className="text-xl text-amber-200 mb-8">
+                Control the game, manage questions, and run the trivia session for your audience.
+              </p>
+              <button
+                onClick={() => setAppMode('landing')}
+                className="bg-gradient-to-r from-amber-600 to-amber-800 hover:from-amber-500 hover:to-amber-700 text-black text-2xl font-bold py-6 px-12 rounded-full transition-all duration-300 shadow-lg border-2 border-amber-400 w-full"
+              >
+                Host Game
+              </button>
+            </div>
+
+            {/* Guest Option */}
+            <div className="bg-black/40 backdrop-blur-lg rounded-3xl p-12 border-2 border-emerald-400/30 shadow-2xl relative hover:border-emerald-400/50 transition-all duration-300 transform hover:scale-105">
+              <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-emerald-400 rotate-45"></div>
+              <Play className="w-20 h-20 mx-auto mb-6 text-emerald-300" />
+              <h2 className="text-4xl font-bold mb-6 text-emerald-100">Guest</h2>
+              <p className="text-xl text-emerald-200 mb-8">
+                Join a trivia game as a player and submit your answers from your device.
+              </p>
+              <button
+                onClick={() => setAppMode('guest')}
+                className="bg-gradient-to-r from-emerald-600 to-emerald-800 hover:from-emerald-500 hover:to-emerald-700 text-white text-2xl font-bold py-6 px-12 rounded-full transition-all duration-300 shadow-lg border-2 border-emerald-400/50 w-full"
+              >
+                Join Game
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -267,8 +374,27 @@ const TriviaApp = () => {
             <div className="bg-black/40 backdrop-blur-lg rounded-3xl p-12 border-2 border-amber-400/30 shadow-2xl relative">
               <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-12 h-12 bg-amber-400 rotate-45"></div>
               <p className="text-2xl text-amber-200 mb-4">Waiting for host to start the game...</p>
+              
+              {/* Player Mode QR Code */}
+              {gameState.playerMode && (
+                <div className="mt-8 p-6 bg-emerald-600/20 border-2 border-emerald-400/50 rounded-2xl">
+                  <h3 className="text-2xl font-bold text-emerald-300 mb-4">Join with Your Phone</h3>
+                  <div className="flex flex-col items-center">
+                    <p className="text-lg text-emerald-200 mb-4">Scan QR code to join the game:</p>
+                    <QRCodeDisplay 
+                      url={getGuestUrl()} 
+                      size={180}
+                      className="mb-4"
+                    />
+                    <p className="text-sm text-emerald-300 font-medium">
+                      Players can submit answers from their devices
+                    </p>
+                  </div>
+                </div>
+              )}
+              
               {gameState.showQuestionCounter && (
-                <div className="text-xl text-amber-300">
+                <div className="text-xl text-amber-300 mt-4">
                   {filteredQuestions.length} questions ready • {safeCategories.length} categories
                 </div>
               )}
@@ -345,6 +471,27 @@ const TriviaApp = () => {
                 </div>
               )}
             </div>
+            
+            {/* Compact Player Mode QR Code */}
+            {gameState.playerMode && (
+              <div className="inline-block bg-emerald-600/20 border border-emerald-400/50 rounded-xl p-4 mb-4">
+                <div className="flex items-center space-x-4">
+                  <div className="text-center">
+                    <p className="text-sm text-emerald-300 mb-2 font-medium">Join with Phone</p>
+                    <QRCodeDisplay 
+                      url={getGuestUrl()} 
+                      size={80}
+                    />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-emerald-200 text-sm">
+                      Players can scan to join<br />
+                      and submit answers
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Main Question Area */}
@@ -414,6 +561,43 @@ const TriviaApp = () => {
                 Timer Debug: {gameState.timedRounds ? 'ON' : 'OFF'} | Running: {gameState.isTimerRunning ? 'YES' : 'NO'} | Time: {gameState.timer}
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Guest Mode - Player interface
+  if (appMode === 'guest') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-emerald-900 flex items-center justify-center p-8 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-emerald-100/5 via-transparent to-amber-900/10"></div>
+        <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-emerald-400 via-amber-300 to-emerald-400"></div>
+        
+        {/* Connection Status */}
+        <div className="absolute top-4 right-4">
+          <ConnectionStatus isConnected={isConnected} error={error} />
+        </div>
+
+        <div className="text-center text-white max-w-2xl relative z-10">
+          <div className="mb-12">
+            <Play className="w-32 h-32 mx-auto mb-8 text-emerald-300 drop-shadow-lg" />
+            <h1 className="text-6xl font-bold mb-6 bg-gradient-to-r from-emerald-300 via-amber-300 to-emerald-400 bg-clip-text text-transparent drop-shadow-2xl">
+              PLAYER MODE
+            </h1>
+            <p className="text-2xl text-emerald-100 mb-12 font-light tracking-wide">Coming Soon!</p>
+          </div>
+          
+          <div className="bg-black/40 backdrop-blur-lg rounded-3xl p-8 border-2 border-emerald-400/30 shadow-2xl">
+            <p className="text-lg text-emerald-200 mb-8">
+              Player mode is under development. Soon you'll be able to join trivia games from your device and submit answers in real-time!
+            </p>
+            <button
+              onClick={() => setAppMode('main')}
+              className="bg-gradient-to-r from-amber-600 to-amber-800 hover:from-amber-500 hover:to-amber-700 text-black text-xl font-bold py-4 px-8 rounded-full transition-all duration-300 shadow-lg border-2 border-amber-400 w-full"
+            >
+              Back to Main Menu
+            </button>
           </div>
         </div>
       </div>
@@ -558,7 +742,7 @@ const TriviaApp = () => {
                       />
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-sm font-semibold text-amber-200 mb-2">Question Info</label>
                       <label className="flex items-center space-x-3 bg-black/20 border border-amber-400/30 rounded-lg px-3 py-2 cursor-pointer">
@@ -590,6 +774,23 @@ const TriviaApp = () => {
                           className="w-4 h-4 text-emerald-600 bg-black/30 border-amber-400/30 rounded focus:ring-emerald-500"
                         />
                         <span className="text-amber-100">Show Wait Between Questions</span>
+                      </label>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-amber-200 mb-2">Player Mode</label>
+                      <label className="flex items-center space-x-3 bg-black/20 border border-amber-400/30 rounded-lg px-3 py-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={gameState.playerMode}
+                          onChange={(e) => {
+                            console.log('🎮 Setting player_mode to:', e.target.checked);
+                            updateGameSettings({
+                              player_mode: e.target.checked
+                            });
+                          }}
+                          className="w-4 h-4 text-emerald-600 bg-black/30 border-amber-400/30 rounded focus:ring-emerald-500"
+                        />
+                        <span className="text-amber-100">Enable Player Mode</span>
                       </label>
                     </div>
                   </div>

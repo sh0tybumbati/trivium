@@ -15,7 +15,8 @@ class GameState {
       gameTitle: 'TRIVIA NIGHT',
       gameSubtitle: 'Get Ready to Play!',
       showQuestionCounter: false,
-      showWaitScreen: true
+      showWaitScreen: true,
+      playerMode: false
     };
     
     this.clients = new Set();
@@ -77,7 +78,8 @@ class GameState {
       timedRounds: settings.timed_rounds,
       timeLimit: settings.time_limit || this.state.timeLimit || 30,
       questionLimit: settings.question_limit,
-      selectedCategories: settings.selected_categories
+      selectedCategories: settings.selected_categories,
+      playerMode: settings.player_mode
     };
     
     console.log('📋 Applying settings update:', settingsToUpdate);

@@ -33,6 +33,34 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Network info endpoint for QR code generation
+app.get('/api/network', (req, res) => {
+  const os = require('os');
+  const networkInterfaces = os.networkInterfaces();
+  
+  // Find the primary network interface (non-internal IPv4)
+  let networkIP = 'localhost';
+  
+  for (const interfaceName in networkInterfaces) {
+    const addresses = networkInterfaces[interfaceName];
+    for (const addr of addresses) {
+      // Look for IPv4, non-internal addresses
+      if (addr.family === 'IPv4' && !addr.internal) {
+        networkIP = addr.address;
+        break;
+      }
+    }
+    if (networkIP !== 'localhost') break;
+  }
+  
+  res.json({
+    networkIP,
+    frontendPort: 5173, // Default Vite dev server port
+    backendPort: 3001,
+    hostname: os.hostname()
+  });
+});
+
 // Test route
 app.get('/test', (req, res) => {
   res.sendFile(path.join(__dirname, '../test.html'));
