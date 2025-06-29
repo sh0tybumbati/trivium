@@ -4,9 +4,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "npx vite build",
     "preview": "vite preview",
-    "start": "cd server && npm start"
+    "start": "cd server && npm start",
+    "render-build": "npm install --include=dev && npx vite build && cd server && npm install"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.5",
