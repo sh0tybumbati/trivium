@@ -31,12 +31,14 @@ type MessageHandler = (message: WebSocketMessage) => void;
 type StateUpdateHandler = (state: GameState) => void;
 type ConnectionHandler = (connected: boolean) => void;
 type QuestionsUpdateHandler = (action: string, data?: any) => void;
+type PlayersUpdateHandler = (action: string, data?: any) => void;
+type AnswersUpdateHandler = (action: string, data?: any) => void;
 
 class WebSocketService {
   private ws: WebSocket | null = null;
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
-  private reconnectInterval = 1000;
+  private maxReconnectAttempts = 10; // Increased from 5 to 10
+  private reconnectInterval = 2000; // Increased from 1000 to 2000
   private reconnectTimer: NodeJS.Timeout | null = null;
   private pingInterval: NodeJS.Timeout | null = null;
   private isConnected = false;
@@ -45,6 +47,8 @@ class WebSocketService {
   private stateUpdateHandlers: StateUpdateHandler[] = [];
   private connectionHandlers: ConnectionHandler[] = [];
   private questionsUpdateHandlers: QuestionsUpdateHandler[] = [];
+  private playersUpdateHandlers: PlayersUpdateHandler[] = [];
+  private answersUpdateHandlers: AnswersUpdateHandler[] = [];
 
   constructor() {
     this.connect();
@@ -127,6 +131,21 @@ class WebSocketService {
           question: message.question,
           count: message.count
         });
+        break;
+
+      case 'player_joined':
+      case 'player_score_updated':
+      case 'player_connection_updated':
+      case 'players_cleared':
+      case 'all_scores_reset':
+        this.notifyPlayersUpdateHandlers(message.type, message.payload);
+        break;
+
+      case 'player_answer_submitted':
+      case 'answers_cleared':
+      case 'all_answers_cleared':
+        console.log(`🔔 WebSocket received ${message.type}:`, message.payload);
+        this.notifyAnswersUpdateHandlers(message.type, message.payload);
         break;
 
       case 'PONG':
@@ -237,6 +256,26 @@ class WebSocketService {
     };
   }
 
+  onPlayersUpdate(handler: PlayersUpdateHandler): () => void {
+    this.playersUpdateHandlers.push(handler);
+    return () => {
+      const index = this.playersUpdateHandlers.indexOf(handler);
+      if (index > -1) {
+        this.playersUpdateHandlers.splice(index, 1);
+      }
+    };
+  }
+
+  onAnswersUpdate(handler: AnswersUpdateHandler): () => void {
+    this.answersUpdateHandlers.push(handler);
+    return () => {
+      const index = this.answersUpdateHandlers.indexOf(handler);
+      if (index > -1) {
+        this.answersUpdateHandlers.splice(index, 1);
+      }
+    };
+  }
+
   private notifyStateUpdateHandlers(state: GameState): void {
     this.stateUpdateHandlers.forEach(handler => handler(state));
   }
@@ -247,6 +286,14 @@ class WebSocketService {
 
   private notifyQuestionsUpdateHandlers(action: string, data?: any): void {
     this.questionsUpdateHandlers.forEach(handler => handler(action, data));
+  }
+
+  private notifyPlayersUpdateHandlers(action: string, data?: any): void {
+    this.playersUpdateHandlers.forEach(handler => handler(action, data));
+  }
+
+  private notifyAnswersUpdateHandlers(action: string, data?: any): void {
+    this.answersUpdateHandlers.forEach(handler => handler(action, data));
   }
 
   // Utility methods

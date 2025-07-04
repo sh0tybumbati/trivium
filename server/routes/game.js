@@ -35,11 +35,29 @@ module.exports = (db, gameState) => {
 
   // Game control endpoints
   router.post('/start', (req, res) => {
+    // Clear all previous answers when starting a new game
+    db.clearAllPlayerAnswers((err) => {
+      if (err) {
+        console.error('Failed to clear player answers on game start:', err);
+      } else {
+        console.log('Cleared all player answers for new game');
+      }
+    });
+    
     gameState.startGame();
     res.json({ message: 'Game started' });
   });
 
   router.post('/end', (req, res) => {
+    // Clear all answers when ending the game
+    db.clearAllPlayerAnswers((err) => {
+      if (err) {
+        console.error('Failed to clear player answers on game end:', err);
+      } else {
+        console.log('Cleared all player answers on game end');
+      }
+    });
+    
     gameState.endGame();
     res.json({ message: 'Game ended' });
   });

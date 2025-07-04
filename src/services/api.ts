@@ -4,9 +4,20 @@ interface Question {
   id?: number;
   category: string;
   question: string;
+  type: 'multiple_choice' | 'write_in';
   options: string[];
   answer: string;
   explanation: string;
+  image_url?: string;
+}
+
+interface Player {
+  id: number;
+  name: string;
+  score: number;
+  connected: boolean;
+  joined_at: string;
+  last_seen: string;
 }
 
 interface GameSettings {
@@ -35,6 +46,8 @@ interface GameState {
   gameSubtitle: string;
   showQuestionCounter: boolean;
   showWaitScreen: boolean;
+  playerMode: boolean;
+  showLeaderboard: boolean;
 }
 
 class ApiService {
@@ -65,6 +78,7 @@ class ApiService {
   }
 
   async addQuestion(question: Omit<Question, 'id'>): Promise<Question> {
+    console.log('API: Sending question data:', question);
     const response = await fetch(`${this.baseUrl}/questions`, {
       method: 'POST',
       headers: {
@@ -73,7 +87,9 @@ class ApiService {
       body: JSON.stringify(question),
     });
     if (!response.ok) {
-      throw new Error('Failed to add question');
+      const errorText = await response.text();
+      console.log('API Error Response:', errorText);
+      throw new Error(`Failed to add question: ${errorText}`);
     }
     return response.json();
   }
@@ -247,7 +263,123 @@ class ApiService {
     }
     return response.json();
   }
+
+  // Players API
+  async getPlayers(): Promise<Player[]> {
+    const response = await fetch(`${this.baseUrl}/players`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch players');
+    }
+    return response.json();
+  }
+
+  async joinGame(name: string): Promise<Player> {
+    const response = await fetch(`${this.baseUrl}/players/join`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ name }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to join game');
+    }
+    return response.json();
+  }
+
+  async updatePlayerScore(playerId: number, score: number): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/players/${playerId}/score`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ score }),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to update player score');
+    }
+  }
+
+  async updatePlayerConnection(playerId: number, connected: boolean): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/players/${playerId}/connection`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ connected }),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to update player connection');
+    }
+  }
+
+  async clearAllPlayers(): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/players/clear`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) {
+      throw new Error('Failed to clear all players');
+    }
+  }
+
+  async resetPlayerScore(playerId: number): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/players/${playerId}/reset-score`, {
+      method: 'PUT',
+    });
+    if (!response.ok) {
+      throw new Error('Failed to reset player score');
+    }
+  }
+
+  async resetAllPlayerScores(): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/players/reset-all-scores`, {
+      method: 'PUT',
+    });
+    if (!response.ok) {
+      throw new Error('Failed to reset all player scores');
+    }
+  }
+
+  // Player Answers API
+  async submitAnswer(playerId: number, questionId: number, selectedAnswer: string): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/answers/submit`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ playerId, questionId, selectedAnswer }),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to submit answer');
+    }
+  }
+
+  async getPlayerAnswer(playerId: number, questionId: number): Promise<any> {
+    const response = await fetch(`${this.baseUrl}/answers/player/${playerId}/question/${questionId}`);
+    if (!response.ok) {
+      throw new Error('Failed to get player answer');
+    }
+    return response.json();
+  }
+
+  async getQuestionAnswers(questionId: number): Promise<any[]> {
+    const response = await fetch(`${this.baseUrl}/answers/question/${questionId}`);
+    if (!response.ok) {
+      throw new Error('Failed to get question answers');
+    }
+    return response.json();
+  }
+
+  async clearQuestionAnswers(questionId: number): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/answers/question/${questionId}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) {
+      throw new Error('Failed to clear question answers');
+    }
+  }
 }
 
 export default new ApiService();
-export type { Question, GameSettings, GameState };
+export type { Question, GameSettings, GameState, Player };

@@ -14,17 +14,31 @@ module.exports = (db, gameState) => {
 
   // Add new question
   router.post('/', (req, res) => {
-    const { category, question, options, answer, explanation } = req.body;
+    console.log('Received question data:', req.body);
+    const { category, question, type, options, answer, explanation, image_url } = req.body;
     
-    if (!category || !question || !options || !answer) {
+    console.log('Validation check:', { 
+      category: category, 
+      question: question,
+      categoryCheck: !!category,
+      questionCheck: !!question 
+    });
+    
+    if (!category || !question) {
+      console.log('Validation failed: Missing required fields');
       return res.status(400).json({ error: 'Missing required fields' });
     }
-
-    if (!Array.isArray(options) || options.length !== 4) {
-      return res.status(400).json({ error: 'Options must be an array of 4 items' });
+    
+    // For multiple choice, answer is required and options must be provided
+    if (type === 'multiple_choice' && (!answer || !options)) {
+      return res.status(400).json({ error: 'Multiple choice questions require answer and options' });
     }
 
-    const newQuestion = { category, question, options, answer, explanation };
+    if (type === 'multiple_choice' && (!Array.isArray(options) || options.length !== 4)) {
+      return res.status(400).json({ error: 'Multiple choice questions must have 4 options' });
+    }
+
+    const newQuestion = { category, question, type, options, answer, explanation, image_url };
 
     db.addQuestion(newQuestion, (err, result) => {
       if (err) {
@@ -45,17 +59,22 @@ module.exports = (db, gameState) => {
   // Update question
   router.put('/:id', (req, res) => {
     const { id } = req.params;
-    const { category, question, options, answer, explanation } = req.body;
+    const { category, question, type, options, answer, explanation, image_url } = req.body;
     
-    if (!category || !question || !options || !answer) {
+    if (!category || !question) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
-
-    if (!Array.isArray(options) || options.length !== 4) {
-      return res.status(400).json({ error: 'Options must be an array of 4 items' });
+    
+    // For multiple choice, answer is required and options must be provided
+    if (type === 'multiple_choice' && (!answer || !options)) {
+      return res.status(400).json({ error: 'Multiple choice questions require answer and options' });
     }
 
-    const updatedQuestion = { category, question, options, answer, explanation };
+    if (type === 'multiple_choice' && (!Array.isArray(options) || options.length !== 4)) {
+      return res.status(400).json({ error: 'Multiple choice questions must have 4 options' });
+    }
+
+    const updatedQuestion = { category, question, type, options, answer, explanation, image_url };
 
     db.updateQuestion(id, updatedQuestion, (err) => {
       if (err) {

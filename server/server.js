@@ -20,7 +20,7 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, '../dist')));
 
-// API Routes
+// API Routes (except players - initialized after WebSocket server)
 app.use('/api/questions', require('./routes/questions')(db, gameState));
 app.use('/api/game', require('./routes/game')(db, gameState));
 
@@ -66,13 +66,17 @@ app.get('/test', (req, res) => {
   res.sendFile(path.join(__dirname, '../test.html'));
 });
 
-// Serve React app for all other routes
+// WebSocket server
+const wss = new WebSocket.Server({ server });
+
+// Initialize players and answers routes now that WebSocket server is available
+app.use('/api/players', require('./routes/players')(db, wss));
+app.use('/api/answers', require('./routes/answers')(db, wss));
+
+// Serve React app for all other routes (must be last)
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
-
-// WebSocket server
-const wss = new WebSocket.Server({ server });
 
 wss.on('connection', (ws) => {
   console.log('Client connected');
@@ -126,15 +130,114 @@ wss.on('connection', (ws) => {
   });
 });
 
+// Helper function to get current question ID
+function getCurrentQuestionId() {
+  const state = gameState.getState();
+  if (!state.gameStarted || !state.firstQuestionStarted) {
+    return null;
+  }
+  
+  // We need to get the filtered questions to find the current one
+  // For now, we'll need to fetch questions and apply the same filtering logic
+  // This is a simplified version - in a real scenario, we'd want to cache this
+  return new Promise((resolve) => {
+    db.getAllQuestions((err, questions) => {
+      if (err || !questions) {
+        console.error('Failed to get questions for scoring:', err);
+        return resolve(null);
+      }
+      
+      // Apply same filtering logic as frontend
+      let filtered = questions;
+      if (state.selectedCategories && state.selectedCategories.length > 0) {
+        filtered = questions.filter(q => state.selectedCategories.includes(q.category));
+      }
+      if (state.questionLimit && state.questionLimit > 0) {
+        filtered = filtered.slice(0, state.questionLimit);
+      }
+      
+      const currentQuestion = filtered[state.currentSlide];
+      resolve(currentQuestion ? currentQuestion.id : null);
+    });
+  });
+}
+
+// Helper function to score a question and broadcast updates
+function scoreQuestionAndBroadcast(questionIdPromise) {
+  // Handle both direct ID and Promise
+  Promise.resolve(questionIdPromise).then(questionId => {
+    if (!questionId) return;
+    
+    console.log(`🏆 Scoring question ${questionId}...`);
+    
+    db.scoreCorrectAnswersForQuestion(questionId, 1, (err, scoreUpdates) => {
+      if (err) {
+        console.error('Failed to score correct answers:', err);
+        return;
+      }
+      
+      if (scoreUpdates.length > 0) {
+        console.log(`✅ Awarded points to ${scoreUpdates.length} players`);
+        
+        // Broadcast score updates to all clients
+        scoreUpdates.forEach(update => {
+          const message = JSON.stringify({
+            type: 'player_score_updated',
+            playerId: update.playerId,
+            score: update.newScore
+          });
+          
+          wss.clients.forEach(client => {
+            if (client.readyState === client.OPEN) {
+              client.send(message);
+            }
+          });
+        });
+      } else {
+        console.log('📝 No correct answers to score for this question');
+      }
+    });
+  });
+}
+
 function handleGameAction(action, payload) {
+  console.log('🎮 Handling game action:', action, payload);
   switch (action) {
     case 'START_GAME':
+      // Clear all previous answers when starting a new game
+      db.clearAllPlayerAnswers((err) => {
+        if (err) {
+          console.error('Failed to clear player answers on game start:', err);
+        } else {
+          console.log('Cleared all player answers for new game');
+          // Broadcast that all answers were cleared
+          gameState.broadcast({
+            type: 'all_answers_cleared',
+            payload: { reason: 'game_start' }
+          });
+        }
+      });
       gameState.startGame();
       break;
     case 'END_GAME':
+      // Clear all answers when ending the game
+      db.clearAllPlayerAnswers((err) => {
+        if (err) {
+          console.error('Failed to clear player answers on game end:', err);
+        } else {
+          console.log('Cleared all player answers on game end');
+          // Broadcast that all answers were cleared
+          gameState.broadcast({
+            type: 'all_answers_cleared',
+            payload: { reason: 'game_end' }
+          });
+        }
+      });
       gameState.endGame();
       break;
     case 'NEXT_SLIDE':
+      // Score current question before moving to next (if not already scored)
+      scoreQuestionAndBroadcast(getCurrentQuestionId());
       gameState.nextSlide();
       break;
     case 'PREV_SLIDE':
@@ -144,6 +247,10 @@ function handleGameAction(action, payload) {
       gameState.showQuestion();
       break;
     case 'TOGGLE_ANSWER':
+      // Score correct answers when revealing the answer (if not already scored)
+      if (!gameState.getState().showAnswer) {
+        scoreQuestionAndBroadcast(getCurrentQuestionId());
+      }
       gameState.toggleAnswer();
       break;
     case 'START_TIMER':
@@ -157,6 +264,11 @@ function handleGameAction(action, payload) {
       break;
     case 'RESET_TIMER':
       gameState.resetTimer();
+      break;
+    case 'TOGGLE_LEADERBOARD':
+      gameState.updateState({ 
+        showLeaderboard: !gameState.getState().showLeaderboard 
+      });
       break;
     case 'RESET_QUESTION':
       gameState.updateState({ 

@@ -147,34 +147,28 @@ class GameState {
   }
 
   nextSlide() {
-    const shouldShowQuestion = !this.state.showWaitScreen;
-    const shouldStartTimer = shouldShowQuestion && this.state.timedRounds;
-    
     // Reset timer FIRST to set correct time
     this.resetTimer();
     
-    // Then update state (including starting timer if needed)
+    // Then update state - don't automatically show question, let host control it
     this.updateState({
       currentSlide: this.state.currentSlide + 1,
       showAnswer: false,
-      firstQuestionStarted: shouldShowQuestion,
-      isTimerRunning: shouldStartTimer
+      firstQuestionStarted: false,
+      isTimerRunning: false
     });
   }
 
   prevSlide() {
-    const shouldShowQuestion = !this.state.showWaitScreen;
-    const shouldStartTimer = shouldShowQuestion && this.state.timedRounds;
-    
     // Reset timer FIRST to set correct time
     this.resetTimer();
     
-    // Then update state (including starting timer if needed)
+    // Then update state - don't automatically show question, let host control it
     this.updateState({
       currentSlide: Math.max(0, this.state.currentSlide - 1),
       showAnswer: false,
-      firstQuestionStarted: shouldShowQuestion,
-      isTimerRunning: shouldStartTimer
+      firstQuestionStarted: false,
+      isTimerRunning: false
     });
   }
 
