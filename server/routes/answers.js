@@ -4,7 +4,7 @@ const router = express.Router();
 module.exports = (db, wss) => {
   // Submit or update player answer
   router.post('/submit', (req, res) => {
-    const { playerId, questionId, selectedAnswer } = req.body;
+    const { playerId, questionId, selectedAnswer, timeRemaining, timeLimit } = req.body;
 
     if (!playerId || !questionId || !selectedAnswer) {
       return res.status(400).json({ 
@@ -26,21 +26,69 @@ module.exports = (db, wss) => {
       // Determine if answer is correct (for multiple choice questions)
       const isCorrect = question.type === 'multiple_choice' ? selectedAnswer === question.answer : null;
       
-      // Submit the answer with correctness info
-      db.submitPlayerAnswerWithCorrectness(playerId, questionId, selectedAnswer, isCorrect, (err) => {
+      // Submit the answer with correctness info and timing data
+      db.submitPlayerAnswerWithCorrectness(playerId, questionId, selectedAnswer, isCorrect, timeRemaining, timeLimit, (err) => {
         if (err) {
           console.error('Error submitting player answer:', err);
           return res.status(500).json({ error: 'Failed to submit answer' });
         }
 
+        // Check if Timer Eats Points mode is enabled and lock in the score for correct multiple choice answers
+        let lockedScore = null;
+        if (isCorrect && timeRemaining !== null && timeLimit !== null) {
+          db.getGameSettings((err, settings) => {
+            if (!err && settings && settings.timer_eats_points) {
+              // Calculate score based on timing but don't award yet
+              const scoreMultiplier = settings.score_multiplier || 10;
+              const minPointsPercentage = settings.min_points_percentage || 25;
+              const timeRatio = timeRemaining / timeLimit;
+              const minRatio = minPointsPercentage / 100;
+              const finalRatio = Math.max(minRatio, timeRatio);
+              lockedScore = Math.round(scoreMultiplier * finalRatio);
+
+              // Update the answer record with the locked score
+              db.db.run(`
+                UPDATE player_answers 
+                SET locked_score = ? 
+                WHERE player_id = ? AND question_id = ?
+              `, [lockedScore, playerId, questionId], (err) => {
+                if (!err) {
+                  console.log(`🔒 Timer Eats Points: Player ${playerId} locked in ${lockedScore} points (${timeRemaining}/${timeLimit}s)`);
+                  
+                  // Broadcast score lock notification
+                  const lockMessage = JSON.stringify({
+                    type: 'score_locked',
+                    playerId: playerId,
+                    questionId: questionId,
+                    lockedScore: lockedScore,
+                    timeRemaining: timeRemaining,
+                    timeLimit: timeLimit
+                  });
+
+                  wss.clients.forEach(client => {
+                    if (client.readyState === client.OPEN) {
+                      client.send(lockMessage);
+                    }
+                  });
+                } else {
+                  console.error('Failed to update locked score:', err);
+                }
+              });
+            }
+          });
+        }
+
         if (isCorrect !== null) {
-          console.log(`📝 Player ${playerId} answered ${isCorrect ? 'correctly' : 'incorrectly'} - scoring will happen when answer is revealed`);
+          const scoringNote = isCorrect && timeRemaining !== null ? 
+            ' - checking for Timer Eats Points score locking' : 
+            ' - scoring will happen when answer is revealed';
+          console.log(`📝 Player ${playerId} answered ${isCorrect ? 'correctly' : 'incorrectly'} (time: ${timeRemaining}/${timeLimit})${scoringNote}`);
         }
 
         // Broadcast answer submission to all clients
         const message = JSON.stringify({
           type: 'player_answer_submitted',
-          payload: { playerId, questionId, selectedAnswer, timestamp: new Date().toISOString() }
+          payload: { playerId, questionId, selectedAnswer, timeRemaining, timeLimit, timestamp: new Date().toISOString() }
         });
 
         wss.clients.forEach(client => {

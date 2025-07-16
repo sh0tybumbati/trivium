@@ -107,5 +107,27 @@ module.exports = (db, gameState) => {
     res.json({ message: 'State updated', state: gameState.getState() });
   });
 
+  // Validate host password
+  router.post('/validate-host-password', (req, res) => {
+    const { password } = req.body;
+
+    if (!password && password !== '') {
+      return res.status(400).json({ error: 'Password is required' });
+    }
+
+    db.validateHostPassword(password, (err, isValid) => {
+      if (err) {
+        console.error('Error validating host password:', err);
+        return res.status(500).json({ error: 'Failed to validate password' });
+      }
+
+      if (isValid) {
+        res.json({ valid: true, message: 'Host password is valid' });
+      } else {
+        res.status(401).json({ valid: false, error: 'Invalid host password' });
+      }
+    });
+  });
+
   return router;
 };

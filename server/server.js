@@ -72,6 +72,10 @@ const wss = new WebSocket.Server({ server });
 // Initialize players and answers routes now that WebSocket server is available
 app.use('/api/players', require('./routes/players')(db, wss));
 app.use('/api/answers', require('./routes/answers')(db, wss));
+app.use('/api/pending-points', require('./routes/pending-points')(db, wss));
+app.use('/api/teams', require('./routes/teams')(db, wss));
+app.use('/api/buzzer', require('./routes/buzzer')(db, wss));
+app.use('/api/feud', require('./routes/feud')(db, wss, gameState));
 
 // Serve React app for all other routes (must be last)
 app.get('*', (req, res) => {
@@ -149,14 +153,31 @@ function getCurrentQuestionId() {
       
       // Apply same filtering logic as frontend
       let filtered = questions;
-      if (state.selectedCategories && state.selectedCategories.length > 0) {
-        filtered = questions.filter(q => state.selectedCategories.includes(q.category));
-      }
-      if (state.questionLimit && state.questionLimit > 0) {
-        filtered = filtered.slice(0, state.questionLimit);
+      
+      // If playlist is provided and has items, use it instead of category filtering
+      if (state.includedQuestions && state.includedQuestions.length > 0) {
+        // Filter questions by playlist, maintaining the playlist order
+        filtered = state.includedQuestions
+          .map(id => questions.find(q => q.id === id))
+          .filter(Boolean);
+      } else {
+        // Otherwise, use the original category-based filtering
+        if (state.selectedCategories && state.selectedCategories.length > 0) {
+          filtered = questions.filter(q => state.selectedCategories.includes(q.category));
+        }
+        if (state.questionLimit && state.questionLimit > 0) {
+          filtered = filtered.slice(0, state.questionLimit);
+        }
       }
       
       const currentQuestion = filtered[state.currentSlide];
+      console.log(`🎯 getCurrentQuestionId debug:`, {
+        currentSlide: state.currentSlide,
+        totalFiltered: filtered.length,
+        playlistLength: state.includedQuestions?.length || 0,
+        currentQuestionId: currentQuestion?.id,
+        currentQuestionText: currentQuestion?.question?.substring(0, 50)
+      });
       resolve(currentQuestion ? currentQuestion.id : null);
     });
   });
@@ -170,7 +191,7 @@ function scoreQuestionAndBroadcast(questionIdPromise) {
     
     console.log(`🏆 Scoring question ${questionId}...`);
     
-    db.scoreCorrectAnswersForQuestion(questionId, 1, (err, scoreUpdates) => {
+    db.scoreCorrectAnswersForQuestion(questionId, (err, scoreUpdates) => {
       if (err) {
         console.error('Failed to score correct answers:', err);
         return;
@@ -217,6 +238,19 @@ function handleGameAction(action, payload) {
           });
         }
       });
+      // Also clear all pending points
+      db.clearAllPendingPoints((err) => {
+        if (err) {
+          console.error('Failed to clear pending points on game start:', err);
+        } else {
+          console.log('Cleared all pending points for new game');
+          // Broadcast that all pending points were cleared
+          gameState.broadcast({
+            type: 'all_pending_points_cleared',
+            payload: { reason: 'game_start' }
+          });
+        }
+      });
       gameState.startGame();
       break;
     case 'END_GAME':
@@ -233,12 +267,94 @@ function handleGameAction(action, payload) {
           });
         }
       });
+      // Also clear all pending points
+      db.clearAllPendingPoints((err) => {
+        if (err) {
+          console.error('Failed to clear pending points on game end:', err);
+        } else {
+          console.log('Cleared all pending points on game end');
+          // Broadcast that all pending points were cleared
+          gameState.broadcast({
+            type: 'all_pending_points_cleared',
+            payload: { reason: 'game_end' }
+          });
+        }
+      });
+      
+      // Auto-clear players if setting is enabled
+      db.getGameSettings((err, settings) => {
+        if (!err && settings && settings.auto_clear_players) {
+          console.log('🧹 Auto-clearing players due to game end');
+          db.clearAllPlayers((err) => {
+            if (err) {
+              console.error('Failed to auto-clear players on game end:', err);
+            } else {
+              console.log('Auto-cleared all players on game end');
+              // Broadcast that players were cleared
+              gameState.broadcast({
+                type: 'players_cleared',
+                payload: { reason: 'game_end_auto_clear' }
+              });
+            }
+          });
+        }
+      });
+      
       gameState.endGame();
       break;
     case 'NEXT_SLIDE':
       // Score current question before moving to next (if not already scored)
-      scoreQuestionAndBroadcast(getCurrentQuestionId());
-      gameState.nextSlide();
+      getCurrentQuestionId().then(questionId => {
+        if (questionId) {
+          scoreQuestionAndBroadcast(questionId);
+          
+          // Also commit pending points for write-in questions
+          db.getAllQuestions((err, questions) => {
+            if (!err && questions) {
+              const currentQuestion = questions.find(q => q.id === questionId);
+              if (currentQuestion && currentQuestion.type === 'write_in') {
+                console.log(`📝 Committing pending points for write-in question ${questionId} on next slide`);
+                db.commitPendingPointsForQuestion(questionId, (err, scoreUpdates) => {
+                  if (err) {
+                    console.error('Failed to commit pending points on next slide:', err);
+                  } else if (scoreUpdates.length > 0) {
+                    console.log(`✅ Committed ${scoreUpdates.length} pending score updates on next slide`);
+                    
+                    // Broadcast score updates to all clients
+                    scoreUpdates.forEach(update => {
+                      const message = JSON.stringify({
+                        type: 'player_score_updated',
+                        playerId: update.playerId,
+                        score: update.newScore
+                      });
+                      
+                      wss.clients.forEach(client => {
+                        if (client.readyState === client.OPEN) {
+                          client.send(message);
+                        }
+                      });
+                    });
+
+                    // Also broadcast that pending points were committed
+                    const commitMessage = JSON.stringify({
+                      type: 'pending_points_committed',
+                      questionId: questionId,
+                      scoreUpdates: scoreUpdates
+                    });
+                    
+                    wss.clients.forEach(client => {
+                      if (client.readyState === client.OPEN) {
+                        client.send(commitMessage);
+                      }
+                    });
+                  }
+                });
+              }
+            }
+          });
+        }
+        gameState.nextSlide();
+      });
       break;
     case 'PREV_SLIDE':
       gameState.prevSlide();
@@ -249,7 +365,61 @@ function handleGameAction(action, payload) {
     case 'TOGGLE_ANSWER':
       // Score correct answers when revealing the answer (if not already scored)
       if (!gameState.getState().showAnswer) {
-        scoreQuestionAndBroadcast(getCurrentQuestionId());
+        // For multiple choice questions, score automatically
+        getCurrentQuestionId().then(questionId => {
+          if (questionId) {
+            scoreQuestionAndBroadcast(questionId);
+          }
+        });
+        
+        // For write-in questions, commit any pending points
+        Promise.resolve(getCurrentQuestionId()).then(questionId => {
+          if (questionId) {
+            db.getAllQuestions((err, questions) => {
+              if (!err && questions) {
+                const currentQuestion = questions.find(q => q.id === questionId);
+                if (currentQuestion && currentQuestion.type === 'write_in') {
+                  console.log(`📝 Committing pending points for write-in question ${questionId}`);
+                  db.commitPendingPointsForQuestion(questionId, (err, scoreUpdates) => {
+                    if (err) {
+                      console.error('Failed to commit pending points:', err);
+                    } else if (scoreUpdates.length > 0) {
+                      console.log(`✅ Committed ${scoreUpdates.length} pending score updates`);
+                      
+                      // Broadcast score updates to all clients
+                      scoreUpdates.forEach(update => {
+                        const message = JSON.stringify({
+                          type: 'player_score_updated',
+                          playerId: update.playerId,
+                          score: update.newScore
+                        });
+                        
+                        wss.clients.forEach(client => {
+                          if (client.readyState === client.OPEN) {
+                            client.send(message);
+                          }
+                        });
+                      });
+
+                      // Also broadcast that pending points were committed
+                      const commitMessage = JSON.stringify({
+                        type: 'pending_points_committed',
+                        questionId: questionId,
+                        scoreUpdates: scoreUpdates
+                      });
+                      
+                      wss.clients.forEach(client => {
+                        if (client.readyState === client.OPEN) {
+                          client.send(commitMessage);
+                        }
+                      });
+                    }
+                  });
+                }
+              }
+            });
+          }
+        });
       }
       gameState.toggleAnswer();
       break;
@@ -285,6 +455,32 @@ function handleGameAction(action, payload) {
           gameState.updateSettings(payload);
         }
       });
+      break;
+    case 'ADD_TO_PLAYLIST':
+      if (payload && payload.questionId) {
+        const currentState = gameState.getState();
+        const newPlaylist = [...currentState.includedQuestions];
+        // Only add if not already in playlist
+        if (!newPlaylist.includes(payload.questionId)) {
+          newPlaylist.push(payload.questionId);
+          gameState.updateState({ includedQuestions: newPlaylist });
+          console.log('📋 Added question to playlist:', payload.questionId);
+        }
+      }
+      break;
+    case 'REMOVE_FROM_PLAYLIST':
+      if (payload && payload.questionId) {
+        const currentState = gameState.getState();
+        const newPlaylist = currentState.includedQuestions.filter(id => id !== payload.questionId);
+        gameState.updateState({ includedQuestions: newPlaylist });
+        console.log('📋 Removed question from playlist:', payload.questionId);
+      }
+      break;
+    case 'UPDATE_PLAYLIST':
+      if (payload && Array.isArray(payload.questionIds)) {
+        gameState.updateState({ includedQuestions: payload.questionIds });
+        console.log('📋 Updated entire playlist:', payload.questionIds);
+      }
       break;
     default:
       console.log('Unknown game action:', action);

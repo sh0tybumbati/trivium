@@ -15,7 +15,7 @@ module.exports = (db, gameState) => {
   // Add new question
   router.post('/', (req, res) => {
     console.log('Received question data:', req.body);
-    const { category, question, type, options, answer, explanation, image_url } = req.body;
+    const { category, question, type, options, answer, explanation, image_url, feud_answers } = req.body;
     
     console.log('Validation check:', { 
       category: category, 
@@ -38,7 +38,7 @@ module.exports = (db, gameState) => {
       return res.status(400).json({ error: 'Multiple choice questions must have 4 options' });
     }
 
-    const newQuestion = { category, question, type, options, answer, explanation, image_url };
+    const newQuestion = { category, question, type, options, answer, explanation, image_url, feud_answers };
 
     db.addQuestion(newQuestion, (err, result) => {
       if (err) {
@@ -59,7 +59,7 @@ module.exports = (db, gameState) => {
   // Update question
   router.put('/:id', (req, res) => {
     const { id } = req.params;
-    const { category, question, type, options, answer, explanation, image_url } = req.body;
+    const { category, question, type, options, answer, explanation, image_url, feud_answers } = req.body;
     
     if (!category || !question) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -74,7 +74,7 @@ module.exports = (db, gameState) => {
       return res.status(400).json({ error: 'Multiple choice questions must have 4 options' });
     }
 
-    const updatedQuestion = { category, question, type, options, answer, explanation, image_url };
+    const updatedQuestion = { category, question, type, options, answer, explanation, image_url, feud_answers };
 
     db.updateQuestion(id, updatedQuestion, (err) => {
       if (err) {

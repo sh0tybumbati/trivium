@@ -16,7 +16,21 @@ class GameState {
       gameSubtitle: 'Get Ready to Play!',
       showQuestionCounter: false,
       showWaitScreen: true,
-      playerMode: false
+      playerMode: false,
+      includedQuestions: [],  // Playlist of question IDs in order
+      
+      // Family Feud game state
+      feudState: {
+        activeTeam: null,           // ID of team currently answering
+        opposingTeam: null,         // ID of opposing team
+        gamePhase: 'setup',         // 'setup', 'face-off', 'team-play', 'steal'
+        teamAnswerCount: 0,         // How many team members have answered
+        maxAnswersPerTeam: 3,       // Before switching to other team
+        strikes: 0,                 // Current strike count
+        buzzerOrder: [],            // Array of player IDs in buzz order for current team
+        currentBuzzerIndex: 0,      // Which team member should buzz next
+        lastAnswerCorrect: null     // Track if last answer was correct/wrong
+      }
     };
     
     this.clients = new Set();
@@ -209,6 +223,158 @@ class GameState {
   broadcast(message) {
     this.clients.forEach(client => {
       this.sendToClient(client, message);
+    });
+  }
+
+  // Family Feud State Management
+  initializeFeudGame(activeTeamId, opposingTeamId) {
+    this.updateState({
+      feudState: {
+        ...this.state.feudState,
+        activeTeam: activeTeamId,
+        opposingTeam: opposingTeamId,
+        gamePhase: 'face-off',
+        teamAnswerCount: 0,
+        strikes: 0,
+        buzzerOrder: [],
+        currentBuzzerIndex: 0,
+        lastAnswerCorrect: null
+      }
+    });
+    
+    this.broadcast({
+      type: 'feud_game_initialized',
+      activeTeam: activeTeamId,
+      opposingTeam: opposingTeamId
+    });
+  }
+
+  switchFeudTeams() {
+    const currentActive = this.state.feudState.activeTeam;
+    const currentOpposing = this.state.feudState.opposingTeam;
+    
+    this.updateState({
+      feudState: {
+        ...this.state.feudState,
+        activeTeam: currentOpposing,
+        opposingTeam: currentActive,
+        teamAnswerCount: 0,
+        buzzerOrder: [],
+        currentBuzzerIndex: 0,
+        gamePhase: 'team-play'
+      }
+    });
+    
+    this.broadcast({
+      type: 'feud_teams_switched',
+      newActiveTeam: currentOpposing,
+      newOpposingTeam: currentActive
+    });
+  }
+
+  addFeudStrike() {
+    const newStrikes = this.state.feudState.strikes + 1;
+    this.updateState({
+      feudState: {
+        ...this.state.feudState,
+        strikes: newStrikes
+      }
+    });
+    
+    // If 3 strikes, switch teams
+    if (newStrikes >= 3) {
+      this.switchFeudTeams();
+    }
+    
+    this.broadcast({
+      type: 'feud_strike_added',
+      strikes: newStrikes,
+      teamsSwitch: newStrikes >= 3
+    });
+  }
+
+  removeFeudStrike() {
+    const newStrikes = Math.max(0, this.state.feudState.strikes - 1);
+    this.updateState({
+      feudState: {
+        ...this.state.feudState,
+        strikes: newStrikes
+      }
+    });
+    
+    this.broadcast({
+      type: 'feud_strike_removed',
+      strikes: newStrikes
+    });
+  }
+
+  setFeudGamePhase(phase) {
+    this.updateState({
+      feudState: {
+        ...this.state.feudState,
+        gamePhase: phase
+      }
+    });
+    
+    this.broadcast({
+      type: 'feud_phase_changed',
+      phase: phase
+    });
+  }
+
+  addPlayerToBuzzerOrder(playerId) {
+    const currentOrder = [...this.state.feudState.buzzerOrder];
+    if (!currentOrder.includes(playerId)) {
+      currentOrder.push(playerId);
+      
+      this.updateState({
+        feudState: {
+          ...this.state.feudState,
+          buzzerOrder: currentOrder
+        }
+      });
+      
+      this.broadcast({
+        type: 'feud_buzzer_order_updated',
+        buzzerOrder: currentOrder
+      });
+    }
+  }
+
+  getNextPlayerInBuzzerOrder() {
+    const { buzzerOrder, currentBuzzerIndex } = this.state.feudState;
+    if (buzzerOrder.length === 0) return null;
+    
+    return buzzerOrder[currentBuzzerIndex % buzzerOrder.length];
+  }
+
+  advanceBuzzerOrder() {
+    this.updateState({
+      feudState: {
+        ...this.state.feudState,
+        currentBuzzerIndex: this.state.feudState.currentBuzzerIndex + 1,
+        teamAnswerCount: this.state.feudState.teamAnswerCount + 1
+      }
+    });
+  }
+
+  resetFeudState() {
+    this.updateState({
+      feudState: {
+        activeTeam: null,
+        opposingTeam: null,
+        gamePhase: 'setup',
+        teamAnswerCount: 0,
+        maxAnswersPerTeam: 3,
+        strikes: 0,
+        buzzerOrder: [],
+        currentBuzzerIndex: 0,
+        lastAnswerCorrect: null
+      }
+    });
+    
+    this.broadcast({
+      type: 'feud_state_reset'
     });
   }
 }
