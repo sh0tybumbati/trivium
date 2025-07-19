@@ -29,7 +29,18 @@ app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
-    clients: gameState.clients.size
+    clients: gameState.clients.size,
+    environment: process.env.NODE_ENV || 'development',
+    port: process.env.PORT || 3001
+  });
+});
+
+// Root health check for Render
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    service: 'trivium',
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -508,10 +519,37 @@ process.on('SIGINT', () => {
 
 // Start server
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Trivium server running on http://0.0.0.0:${PORT}`);
-  console.log(`📱 Local access: http://localhost:${PORT}`);
-  console.log(`🌐 Network access: http://[YOUR_IP]:${PORT}`);
-  console.log(`💾 Database: SQLite`);
-  console.log(`🔗 WebSocket: Active`);
-});
+const HOST = process.env.HOST || (process.env.NODE_ENV === 'production' ? undefined : '0.0.0.0');
+
+// In production (like Render), don't specify host to let it bind to the default interface
+if (HOST) {
+  server.listen(PORT, HOST, () => {
+    console.log(`🚀 Trivium server running on http://${HOST}:${PORT}`);
+    console.log(`📱 Local access: http://localhost:${PORT}`);
+    console.log(`🌐 Network access: http://[YOUR_IP]:${PORT}`);
+    console.log(`💾 Database: SQLite`);
+    console.log(`🔗 WebSocket: Active`);
+    console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
+  }).on('error', (err) => {
+    console.error('❌ Failed to start server:', err);
+    if (err.code === 'EADDRINUSE') {
+      console.error(`❌ Port ${PORT} is already in use`);
+    }
+    process.exit(1);
+  });
+} else {
+  // Production mode - let the system choose the best interface
+  server.listen(PORT, () => {
+    console.log(`🚀 Trivium server running on port ${PORT}`);
+    console.log(`📱 Production mode - server bound to system default interface`);
+    console.log(`💾 Database: SQLite`);
+    console.log(`🔗 WebSocket: Active`);
+    console.log(`📡 Environment: ${process.env.NODE_ENV || 'production'}`);
+  }).on('error', (err) => {
+    console.error('❌ Failed to start server:', err);
+    if (err.code === 'EADDRINUSE') {
+      console.error(`❌ Port ${PORT} is already in use`);
+    }
+    process.exit(1);
+  });
+}
