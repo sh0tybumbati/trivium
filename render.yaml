@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: trivium
+    env: node
+    plan: free
+    buildCommand: npm run render-build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+    autoDeploy: false
+    # Force rebuild - updated 2025-07-20
+    healthCheckPath: /health
