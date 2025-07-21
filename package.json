@@ -9,7 +9,9 @@
     "build": "npx vite build",
     "preview": "vite preview",
     "start": "cd server && npm start",
-    "render-build": "npm install --include=dev && npx vite build && cd server && npm install"
+    "render-build": "npm ci && npx vite build && cd server && npm ci --production",
+    "build:check": "npm run build && ls -la dist/",
+    "postinstall": "cd server && npm install"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.5",
@@ -28,5 +30,9 @@
     "tailwindcss": "^3.3.5",
     "typescript": "^5.2.2",
     "vite": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
   }
 }

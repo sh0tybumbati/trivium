@@ -33,6 +33,7 @@ type ConnectionHandler = (connected: boolean) => void;
 type QuestionsUpdateHandler = (action: string, data?: any) => void;
 type PlayersUpdateHandler = (action: string, data?: any) => void;
 type AnswersUpdateHandler = (action: string, data?: any) => void;
+type PendingPointsUpdateHandler = (action: string, data?: any) => void;
 
 class WebSocketService {
   private ws: WebSocket | null = null;
@@ -49,6 +50,7 @@ class WebSocketService {
   private questionsUpdateHandlers: QuestionsUpdateHandler[] = [];
   private playersUpdateHandlers: PlayersUpdateHandler[] = [];
   private answersUpdateHandlers: AnswersUpdateHandler[] = [];
+  private pendingPointsUpdateHandlers: PendingPointsUpdateHandler[] = [];
 
   constructor() {
     this.connect();
@@ -134,8 +136,10 @@ class WebSocketService {
         break;
 
       case 'player_joined':
+      case 'player_reconnected':
       case 'player_score_updated':
       case 'player_connection_updated':
+      case 'player_password_reset':
       case 'players_cleared':
       case 'all_scores_reset':
         this.notifyPlayersUpdateHandlers(message.type, message.payload);
@@ -146,6 +150,30 @@ class WebSocketService {
       case 'all_answers_cleared':
         console.log(`🔔 WebSocket received ${message.type}:`, message.payload);
         this.notifyAnswersUpdateHandlers(message.type, message.payload);
+        break;
+
+      case 'pending_points_awarded':
+      case 'pending_points_updated':
+      case 'pending_points_committed':
+      case 'pending_points_cleared':
+      case 'all_pending_points_cleared':
+        console.log(`🏆 WebSocket received ${message.type}:`, message.payload);
+        this.notifyPendingPointsUpdateHandlers(message.type, message.payload);
+        break;
+
+      case 'feud_answer_revealed':
+      case 'feud_answers_reset':
+      case 'feud_points_awarded':
+      case 'feud_answer_added':
+      case 'feud_answer_deleted':
+      case 'feud_game_initialized':
+      case 'feud_teams_switched':
+      case 'feud_strike_added':
+      case 'feud_strike_removed':
+      case 'feud_phase_changed':
+      case 'feud_state_reset':
+        console.log(`🎪 WebSocket received ${message.type}:`, message.payload);
+        // These are handled directly by TriviaApp.tsx onMessage handler
         break;
 
       case 'PONG':
@@ -276,6 +304,16 @@ class WebSocketService {
     };
   }
 
+  onPendingPointsUpdate(handler: PendingPointsUpdateHandler): () => void {
+    this.pendingPointsUpdateHandlers.push(handler);
+    return () => {
+      const index = this.pendingPointsUpdateHandlers.indexOf(handler);
+      if (index > -1) {
+        this.pendingPointsUpdateHandlers.splice(index, 1);
+      }
+    };
+  }
+
   private notifyStateUpdateHandlers(state: GameState): void {
     this.stateUpdateHandlers.forEach(handler => handler(state));
   }
@@ -294,6 +332,10 @@ class WebSocketService {
 
   private notifyAnswersUpdateHandlers(action: string, data?: any): void {
     this.answersUpdateHandlers.forEach(handler => handler(action, data));
+  }
+
+  private notifyPendingPointsUpdateHandlers(action: string, data?: any): void {
+    this.pendingPointsUpdateHandlers.forEach(handler => handler(action, data));
   }
 
   // Utility methods

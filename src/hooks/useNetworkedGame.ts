@@ -7,6 +7,7 @@ interface UseNetworkedGameReturn {
   questions: Question[];
   players: Player[];
   gameState: GameState;
+  gameSettings: GameSettings | null;
   isConnected: boolean;
   isLoading: boolean;
   error: string | null;
@@ -41,7 +42,7 @@ interface UseNetworkedGameReturn {
   resetAllPlayerScores: () => Promise<void>;
 
   // Answer management
-  submitAnswer: (playerId: number, questionId: number, selectedAnswer: string) => Promise<void>;
+  submitAnswer: (playerId: number, questionId: number, selectedAnswer: string, timeRemaining?: number, timeLimit?: number) => Promise<void>;
   getPlayerAnswer: (playerId: number, questionId: number) => Promise<any>;
   getQuestionAnswers: (questionId: number) => Promise<any[]>;
   clearQuestionAnswers: (questionId: number) => Promise<void>;
@@ -72,12 +73,14 @@ const initialGameState: GameState = {
   showWaitScreen: true,
   playerMode: false,
   showLeaderboard: false,
+  includedQuestions: [],
 };
 
 export const useNetworkedGame = (appMode: 'landing' | 'bigscreen' | 'host' | 'guest'): UseNetworkedGameReturn => {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [gameState, setGameState] = useState<GameState>(initialGameState);
+  const [gameSettings, setGameSettings] = useState<GameSettings | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -99,10 +102,11 @@ export const useNetworkedGame = (appMode: 'landing' | 'bigscreen' | 'host' | 'gu
         setIsLoading(true);
         setError(null);
 
-        // Load questions and game state
+        // Load questions, game state, and settings
         const promises = [
           apiService.getQuestions(),
-          apiService.getGameState()
+          apiService.getGameState(),
+          apiService.getGameSettings()
         ];
 
         // Load players data for host mode
@@ -111,10 +115,11 @@ export const useNetworkedGame = (appMode: 'landing' | 'bigscreen' | 'host' | 'gu
         }
 
         const results = await Promise.all(promises);
-        const [questionsData, stateData, playersData] = results;
+        const [questionsData, stateData, settingsData, playersData] = results;
 
         setQuestions(questionsData || []);
         setGameState(stateData || initialGameState);
+        setGameSettings(settingsData || null);
         if (appMode === 'host' && playersData) {
           setPlayers(playersData as Player[]);
           console.log('🎯 Auto-loaded players for host mode:', playersData.length);
@@ -207,12 +212,34 @@ export const useNetworkedGame = (appMode: 'landing' | 'bigscreen' | 'host' | 'gu
       }
     });
 
+    const unsubscribePendingPointsUpdate = websocketService.onPendingPointsUpdate((action, data) => {
+      console.log('🏆 Hook received pending points update:', action, data);
+      
+      if (action === 'pending_points_committed') {
+        // When pending points are committed, clear the awarded answers for this question
+        // The actual score updates are handled by the player update handlers
+        if (data?.questionId) {
+          setAwardedAnswers(prev => {
+            const updated = { ...prev };
+            delete updated[data.questionId];
+            localStorage.setItem('trivium-awarded-answers', JSON.stringify(updated));
+            return updated;
+          });
+        }
+      } else if (action === 'all_pending_points_cleared') {
+        // Clear all awarded answers when all pending points are cleared
+        setAwardedAnswers({});
+        localStorage.setItem('trivium-awarded-answers', JSON.stringify({}));
+      }
+    });
+
     return () => {
       unsubscribeConnection();
       unsubscribeStateUpdate();
       unsubscribeQuestionsUpdate();
       unsubscribePlayersUpdate();
       unsubscribeAnswersUpdate();
+      unsubscribePendingPointsUpdate();
     };
   }, []);
 
@@ -361,9 +388,9 @@ export const useNetworkedGame = (appMode: 'landing' | 'bigscreen' | 'host' | 'gu
   }, [appMode]);
 
   // Answer management functions
-  const submitAnswer = useCallback(async (playerId: number, questionId: number, selectedAnswer: string) => {
+  const submitAnswer = useCallback(async (playerId: number, questionId: number, selectedAnswer: string, timeRemaining?: number, timeLimit?: number) => {
     try {
-      await apiService.submitAnswer(playerId, questionId, selectedAnswer);
+      await apiService.submitAnswer(playerId, questionId, selectedAnswer, timeRemaining, timeLimit);
     } catch (err) {
       console.error('Failed to submit answer:', err);
       setError(err instanceof Error ? err.message : 'Failed to submit answer');
@@ -418,51 +445,48 @@ export const useNetworkedGame = (appMode: 'landing' | 'bigscreen' | 'host' | 'gu
     console.log('🏆 Hook awardPoints called:', { playerId, questionId, points, playerName, answer, appMode });
     if (appMode === 'host') {
       try {
-        // Update player score in database
-        const player = players.find(p => p.id === playerId);
-        if (player) {
-          await apiService.updatePlayerScore(playerId, player.score + points);
+        // Award pending points instead of direct score update
+        await apiService.awardPendingPoints(playerId, questionId, points, playerName, answer);
+        
+        // Update awarded answers state (for UI display)
+        setAwardedAnswers(prev => {
+          console.log('🔄 Updating awardedAnswers, previous state:', prev);
+          const existingAwards = prev[questionId] || [];
+          const existingAward = existingAwards.find(award => award.playerId === playerId);
           
-          // Update awarded answers state
-          setAwardedAnswers(prev => {
-            console.log('🔄 Updating awardedAnswers, previous state:', prev);
-            const existingAwards = prev[questionId] || [];
-            const existingAward = existingAwards.find(award => award.playerId === playerId);
-            
-            let newState;
-            if (existingAward) {
-              // Update existing award with additional points
-              newState = {
-                ...prev,
-                [questionId]: prev[questionId].map(award => 
-                  award.playerId === playerId 
-                    ? { ...award, points: award.points + points }
-                    : award
-                )
-              };
-            } else {
-              // Add new awarded answer
-              newState = {
-                ...prev,
-                [questionId]: [
-                  ...(prev[questionId] || []),
-                  { playerId, playerName, answer, points }
-                ]
-              };
-            }
-            console.log('✅ New awardedAnswers state:', newState);
-            // Save to localStorage for persistence across modes
-            localStorage.setItem('trivium-awarded-answers', JSON.stringify(newState));
-            return newState;
-          });
-        }
+          let newState;
+          if (existingAward) {
+            // Replace existing award with new points (don't add to them)
+            newState = {
+              ...prev,
+              [questionId]: prev[questionId].map(award => 
+                award.playerId === playerId 
+                  ? { ...award, points: points } // Set to new value, don't add
+                  : award
+              )
+            };
+          } else {
+            // Add new awarded answer
+            newState = {
+              ...prev,
+              [questionId]: [
+                ...(prev[questionId] || []),
+                { playerId, playerName, answer, points }
+              ]
+            };
+          }
+          console.log('✅ New awardedAnswers state:', newState);
+          // Save to localStorage for persistence across modes
+          localStorage.setItem('trivium-awarded-answers', JSON.stringify(newState));
+          return newState;
+        });
       } catch (err) {
         console.error('Failed to award points:', err);
         setError(err instanceof Error ? err.message : 'Failed to award points');
         throw err;
       }
     }
-  }, [appMode, players]);
+  }, [appMode]);
 
   const getAwardedAnswers = useCallback((questionId?: number) => {
     console.log('📖 getAwardedAnswers called:', { questionId, awardedAnswers });
@@ -538,6 +562,9 @@ export const useNetworkedGame = (appMode: 'landing' | 'bigscreen' | 'host' | 'gu
     try {
       if (appMode === 'host') {
         await apiService.updateGameSettings(settings);
+        // Refresh game settings to get the updated values
+        const updatedSettings = await apiService.getGameSettings();
+        setGameSettings(updatedSettings);
         // Game state will be updated via WebSocket
       }
     } catch (err) {
@@ -553,6 +580,23 @@ export const useNetworkedGame = (appMode: 'landing' | 'bigscreen' | 'host' | 'gu
       return [];
     }
     
+    // If playlist is provided and has items, use it instead of category filtering
+    const playlistQuestionIds = gameState?.includedQuestions || [];
+    if (playlistQuestionIds.length > 0) {
+      // Filter questions by playlist, maintaining the playlist order
+      const playlistQuestions = playlistQuestionIds
+        .map(id => questions.find(q => q.id === id))
+        .filter(Boolean) as Question[];
+      
+      console.log('🎯 Hook getFilteredQuestions - Using server playlist:', {
+        playlistIds: playlistQuestionIds,
+        playlistQuestions: playlistQuestions.map(q => ({ id: q.id, question: q.question.substring(0, 50) }))
+      });
+      
+      return playlistQuestions;
+    }
+    
+    // Otherwise, use the original category-based filtering
     const selectedCategories = gameState?.selectedCategories || [];
     let filtered = selectedCategories.length === 0 
       ? questions 
@@ -563,7 +607,7 @@ export const useNetworkedGame = (appMode: 'landing' | 'bigscreen' | 'host' | 'gu
     }
     
     return filtered;
-  }, [questions, gameState?.selectedCategories, gameState?.questionLimit]);
+  }, [questions, gameState?.selectedCategories, gameState?.questionLimit, gameState?.includedQuestions]);
 
   const getAvailableCategories = useCallback(() => {
     if (!questions || !Array.isArray(questions)) {
@@ -624,6 +668,7 @@ export const useNetworkedGame = (appMode: 'landing' | 'bigscreen' | 'host' | 'gu
     questions,
     players,
     gameState,
+    gameSettings,
     isConnected,
     isLoading,
     error,
