@@ -242,6 +242,9 @@ function Board({ state, title }: { state: GameView; title: string }) {
 
 function Finale({ state }: { state: GameView }) {
   const teams = state.mode === 'teams';
+  const rows = teams ? teamRows(state) : playerRows(state);
+  const tied = rows.filter((r) => r.rank === 1).length > 1;
+  const heading = tied ? 'A tie for first' : teams ? 'Winning team' : 'Champions';
   const confetti = useMemo(() => Array.from({ length: 36 }, (_, i) => ({
     left: (i * 37) % 100, delay: (i * 0.37) % 6, size: 0.6 + ((i * 13) % 7) / 7, hue: ['#d9b45b', '#f1d98f', '#2fbf8f', '#d8454f', '#f3ead3'][i % 5],
   })), []);
@@ -250,9 +253,9 @@ function Finale({ state }: { state: GameView }) {
       {confetti.map((c, i) => (
         <span key={i} className="absolute top-0 rotate-45 animate-fall" style={{ left: `${c.left}%`, animationDelay: `${c.delay}s`, width: `${c.size}vw`, height: `${c.size}vw`, background: c.hue }} aria-hidden />
       ))}
-      <h1 className="display gold-text relative text-[6vw] leading-none">{teams ? 'Winning team' : 'Champions'}</h1>
+      <h1 className="display gold-text relative text-[6vw] leading-none">{heading}</h1>
       <div className="relative mt-[4vh] w-full max-w-[70vw]">
-        <Podium rows={teams ? teamRows(state) : playerRows(state)} size="lg" />
+        <Podium rows={rows} size="lg" />
       </div>
       {teams ? (
         <div className="relative mt-[3vh] flex flex-wrap justify-center gap-[1.2vw] text-[1.6vw] text-mute">

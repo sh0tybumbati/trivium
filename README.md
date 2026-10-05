@@ -1,153 +1,114 @@
-# Trivium - Networked Trivia System
+# Trivium
 
-A professional trivia hosting system with Art Deco styling, real-time multi-device sync, and centralized question management.
+Trivia night for a room full of phones. The host runs the game from a console, a TV or projector shows the questions, and everyone else plays on their own phone.
+
+![The big screen during a question](docs/screenshots/question.png)
+
+## Three screens
+
+| Screen | Address | What it is |
+| --- | --- | --- |
+| **Players** | `/play` | A phone view. Join with a name, tap an answer, play a joker, see your result and rank. |
+| **Big screen** | `/screen` | For a TV or projector. Lobby with a join QR code, countdown, answer bars, leaderboards, podium. |
+| **Host** | `/host` | Set up a game, run it, grade write-in answers, manage questions, review past games. |
+
+| Lobby | Reveal |
+| :-- | :-- |
+| ![Lobby with join QR code](docs/screenshots/lobby.png) | ![Answer reveal with awarded write-in answers](docs/screenshots/reveal.png) |
+
+| Host console | Phone: answering | Phone: result |
+| :-- | :-- | :-- |
+| ![Host console during a reveal](docs/screenshots/host.png) | ![Phone showing a question](docs/screenshots/phone-question.png) | ![Phone showing a result](docs/screenshots/phone-result.png) |
 
 ## Features
 
-🎯 **Multi-Device Hosting**
-- Host controls from any device
-- Multiple big screens supported
-- Real-time WebSocket synchronization
-- Network-based question sharing
+- **Two question types.** Multiple choice, or write-in. Write-in answers match typos and alternative spellings (`Everest|Mount Everest`), and the host can override any mark with none, half or full credit. Questions can carry an image.
+- **Scoring that rewards speed.** Timed questions add up to 50% extra for fast answers. Each player gets one **joker** per game that doubles a question's points.
+- **Individuals or teams.** Players choose a team or are balanced automatically. A team's score is the average of its members, so uneven teams stay fair, or you can switch it to the total.
+- **Rounds.** One long quiz, rounds of a fixed size, or one round per category, with standings between rounds and a podium at the end.
+- **A question bank.** Add, edit and delete questions, filter them, and import or export JSON. A fresh install comes with 38 questions across six categories.
+- **History.** Every finished game is saved with its standings, and the History tab lists your hardest and easiest questions from real answers.
+- **Sound.** Countdown ticks, a buzzer, a reveal chime and a fanfare, synthesised in the browser. No audio files.
+- **Works offline.** Fonts are bundled and there is nothing to fetch from the internet.
 
-🎨 **Great Gatsby Art Deco Design**
-- Gold, black, and emerald color scheme
-- Geometric patterns and elegant typography
-- Professional presentation quality
+### Fair play
 
-🎮 **Game Management**
-- Customizable game title and subtitle
-- Timer controls (enable/disable, custom durations)
-- Category-based question filtering
-- Question limit settings
-- Wait screens between questions
+The server owns the game. Correct answers stay on the server until the reveal, so looking at network traffic gives nothing away, and players cannot change scores or drive the game. The host console is limited to the host machine until you set a PIN, and requests that arrive through a proxy or tunnel are treated as remote.
 
-📊 **Question Management**
-- Centralized SQLite database
-- Import/export functionality
-- Real-time question sync across devices
-- Full CRUD operations via web interface
+## Quick start
 
-⚡ **Real-Time Sync**
-- WebSocket-based communication
-- Instant updates across all connected devices
-- Automatic reconnection handling
-- Server-authoritative game state
+Needs **Node.js 24 or newer**. SQLite is built in, so there is nothing to compile.
 
-## Architecture
-
-### Frontend (React + TypeScript)
-- **Landing Mode**: Choose between Host or Big Screen
-- **Host Mode**: Full game control and question management
-- **Big Screen Mode**: Clean audience display for projection
-
-### Backend (Node.js + WebSocket + SQLite)
-- **WebSocket Server**: Real-time state synchronization
-- **REST API**: Question and settings management
-- **SQLite Database**: Centralized question storage
-- **Static Serving**: Serves the React app
-
-## Quick Start
-
-### 1. Install Dependencies
 ```bash
-# Frontend
+git clone https://github.com/sh0tybumbati/trivium.git
+cd trivium
 npm install
-
-# Backend  
-cd server
-npm install
-```
-
-### 2. Build Frontend
-```bash
 npm run build
-```
-
-### 3. Start Server
-```bash
-cd server
 npm start
 ```
 
-### 4. Access the System
-- **Host machine**: http://localhost:3001
-- **Other devices**: http://[HOST_IP]:3001
+The server prints the addresses to use:
 
-## Development
-
-### Frontend Development
-```bash
-npm run dev  # Vite dev server on port 5173
+```
+Trivium is running
+  On this machine:  http://localhost:3001
+  On your network:  http://192.168.1.20:3001
 ```
 
-### Backend Development
-```bash
-cd server
-npm run dev  # Nodemon auto-restart
-```
+Open `/host` on this machine, start a game, put `/screen` on the TV, and have players scan the QR code.
 
-## Usage
-
-1. **Start the server** on the host machine
-2. **Note the IP address** shown in the console
-3. **Connect host device** - choose "Host Mode"
-4. **Connect big screens** - choose "Big Screen Mode" 
-5. **Customize settings** in Host Mode (title, categories, etc.)
-6. **Start the game** and control from Host Mode
-7. **All devices sync automatically** via WebSocket
+For development, `npm run dev` starts the server and the Vite dev server together (open the Vite address, usually `http://localhost:5173`).
 
 ## Configuration
 
-### Game Settings (Host Mode)
-- **Game Title**: Custom title displayed everywhere
-- **Game Subtitle**: Custom subtitle for waiting screens  
-- **Question Info**: Show/hide question and category counts
-- **Wait Screen**: Enable/disable trophy screen between questions
-- **Timer Settings**: Enable/disable timer, set duration per question
-- **Question Limit**: Limit number of questions per game
-- **Categories**: Select which categories to include
+Set these as environment variables.
 
-### Network Access
-The server automatically detects and displays network access information:
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `PORT` | `3001` | Port to listen on. |
+| `HOST` | `0.0.0.0` | Interface to listen on. |
+| `TRIVIUM_DB` | `data/trivium.db` | Where the database is stored. |
+| `HOST_PIN` | none | PIN for the host console. Overrides any PIN set in the app. |
+| `PUBLIC_URL` | none | Public address used in QR codes, for example `https://trivia.example.com`. |
+| `REQUIRE_JOIN_CODE` | off | Set to `1` to make players enter the four-letter code from the big screen. |
+
+Running it beyond one room, behind a tunnel or on a server, is covered in [docs/deployment.md](docs/deployment.md).
+
+## Scoring
+
+| Rule | Detail |
+| --- | --- |
+| Base points | Set per game (default 10). |
+| Speed bonus | Up to +50% of the base, in proportion to the time left. Only for a fully correct answer. |
+| Half credit | Write-in only. Half the base points, no speed bonus. |
+| Joker | Doubles the points for one question. It is used up only if the player answered. A wrong answer with a joker still scores zero. |
+| Ties | Share a rank. The next rank is skipped (1, 1, 3). |
+
+## Project layout
+
 ```
-🚀 Trivium server running on http://0.0.0.0:3001
-📱 Local access: http://localhost:3001
-🌐 Network access: http://[YOUR_IP]:3001
+server/
+  index.js     HTTP and WebSocket server, host sign-in, rate limits
+  game.js      the game engine: phases, answers, scoring, per-audience views
+  scoring.js   pure scoring and answer-matching rules
+  db.js        SQLite (node:sqlite): questions, settings, game history
+  auth.js      PIN hashing, sessions, local-request detection
+  seed.js      starter questions
+src/
+  screens/     Landing, Player, BigScreen, Host (+ host/ tabs)
+  lib/         API client, live-state hook, countdown, sound
+  ui/          shared Art Deco components
+test/          unit and end-to-end tests
 ```
 
-## API Documentation
+## Tests
 
-See `/server/README.md` for complete API documentation.
-
-## File Structure
-
-```
-/Trivium
-├── src/                  # React frontend source
-├── dist/                 # Built frontend files  
-├── server/               # Node.js backend
-│   ├── server.js         # Main server
-│   ├── database.js       # SQLite management
-│   ├── gameState.js      # Real-time state
-│   ├── routes/           # API endpoints
-│   └── trivia.db         # SQLite database
-├── package.json          # Frontend dependencies
-└── README.md             # This file
+```bash
+npm test
 ```
 
-## Technology Stack
+Covers the scoring rules, the database layer, the whole game flow with a controllable clock (timer, jokers, teams, rounds, grading, history), and the HTTP and WebSocket server end to end, including that answers never leak before the reveal.
 
-- **Frontend**: React, TypeScript, Vite, Tailwind CSS
-- **Backend**: Node.js, Express, WebSocket (ws)
-- **Database**: SQLite3
-- **Styling**: Tailwind CSS with custom Art Deco theme
-- **Icons**: Lucide React
+## Limits
 
-## Future Features
-
-- **Player Mode**: Audience participation via mobile devices
-- **Scoring System**: Track player scores and leaderboards  
-- **Team Mode**: Team-based gameplay
-- **Admin Dashboard**: Advanced game management
-- **Cloud Sync**: Optional cloud backup and sharing
+One game runs at a time, and a live game lives in memory. Restarting the server ends the game in progress, but questions and finished games are kept.
