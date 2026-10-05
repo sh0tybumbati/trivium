@@ -14,7 +14,8 @@
     "build": "tsc --noEmit && vite build",
     "start": "node server/index.js",
     "test": "node --test test/",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "bots": "node scripts/bots.mjs"
   },
   "dependencies": {
     "@fontsource/josefin-sans": "^5.3.0",

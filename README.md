@@ -101,6 +101,17 @@ src/
 test/          unit and end-to-end tests
 ```
 
+## Playtesting on your own
+
+You do not need a room full of people to try a game. `npm run bots` joins fake players to the open lobby, and they answer on their own with realistic delays.
+
+1. `npm start`, open `/host`, and open the lobby.
+2. Put `/screen` in another window or on a TV.
+3. In a terminal: `npm run bots -- --count 8` (add `--speed 3` to make them quicker, `--code ABCD` if you require a join code).
+4. Start the game from the host console. Join from your own phone as well to see what a real player sees.
+
+The bots keep going until the game finishes, then print their final scores.
+
 ## Tests
 
 ```bash
