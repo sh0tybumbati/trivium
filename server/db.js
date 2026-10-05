@@ -55,6 +55,9 @@ const MIGRATIONS = [
   `,
 ];
 
+/** Bad input from a user: safe to show the message, maps to HTTP 400. */
+export class ValidationError extends Error {}
+
 const MAX = { category: 40, question: 500, option: 120, answer: 200, explanation: 500, url: 500 };
 
 /** Validate and normalise a question from untrusted input. Throws Error with a readable message. */
@@ -68,19 +71,19 @@ export function cleanQuestion(input) {
   const explanation = str(q.explanation);
   const imageUrl = str(q.imageUrl ?? q.image_url);
 
-  if (!category || category.length > MAX.category) throw new Error(`Category is required (max ${MAX.category} characters).`);
-  if (!question || question.length > MAX.question) throw new Error(`Question text is required (max ${MAX.question} characters).`);
-  if (answer.length > MAX.answer) throw new Error(`Answer is too long (max ${MAX.answer} characters).`);
-  if (explanation.length > MAX.explanation) throw new Error(`Explanation is too long (max ${MAX.explanation} characters).`);
-  if (imageUrl && (!/^https?:\/\//i.test(imageUrl) || imageUrl.length > MAX.url)) throw new Error('Image must be an http(s) URL.');
+  if (!category || category.length > MAX.category) throw new ValidationError(`Category is required (max ${MAX.category} characters).`);
+  if (!question || question.length > MAX.question) throw new ValidationError(`Question text is required (max ${MAX.question} characters).`);
+  if (answer.length > MAX.answer) throw new ValidationError(`Answer is too long (max ${MAX.answer} characters).`);
+  if (explanation.length > MAX.explanation) throw new ValidationError(`Explanation is too long (max ${MAX.explanation} characters).`);
+  if (imageUrl && (!/^https?:\/\//i.test(imageUrl) || imageUrl.length > MAX.url)) throw new ValidationError('Image must be an http(s) URL.');
 
   let options = [];
   if (type === 'multiple_choice') {
     const raw = Array.isArray(q.options) ? q.options : [];
     options = [...new Set(raw.map(str).filter(Boolean))];
-    if (options.length < 2 || options.length > 6) throw new Error('Multiple choice needs 2 to 6 distinct options.');
-    if (options.some((o) => o.length > MAX.option)) throw new Error(`Options are limited to ${MAX.option} characters.`);
-    if (!options.some((o) => o.toLowerCase() === answer.toLowerCase())) throw new Error('The answer must be one of the options.');
+    if (options.length < 2 || options.length > 6) throw new ValidationError('Multiple choice needs 2 to 6 distinct options.');
+    if (options.some((o) => o.length > MAX.option)) throw new ValidationError(`Options are limited to ${MAX.option} characters.`);
+    if (!options.some((o) => o.toLowerCase() === answer.toLowerCase())) throw new ValidationError('The answer must be one of the options.');
   }
   return { category, type, question, options, answer, explanation, imageUrl };
 }
@@ -177,8 +180,8 @@ export function openDb(path = ':memory:', { seed = true } = {}) {
 
     /** Import a list; invalid rows are reported, valid ones are kept. */
     importQuestions(list, { replace = false } = {}) {
-      if (!Array.isArray(list)) throw new Error('Expected a JSON array of questions.');
-      if (list.length > 2000) throw new Error('Import is limited to 2,000 questions at a time.');
+      if (!Array.isArray(list)) throw new ValidationError('Expected a JSON array of questions.');
+      if (list.length > 2000) throw new ValidationError('Import is limited to 2,000 questions at a time.');
       const errors = [];
       let imported = 0;
       tx(() => {
