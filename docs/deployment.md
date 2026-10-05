@@ -27,6 +27,8 @@ HOST_PIN=4827 PUBLIC_URL=https://trivia.example.com npm start
 
 Trivium notices the forwarding headers a tunnel adds and treats those requests as remote, so the "host machine only" shortcut never applies to tunnelled traffic. WebSockets work through the tunnel without extra settings.
 
+If you use your own reverse proxy instead (nginx, Caddy), pass WebSocket upgrades through and keep the original `Host` header, or send `X-Forwarded-Host`. Trivium refuses sockets whose browser origin does not match the host it was reached on.
+
 ## Keeping it running (systemd user service)
 
 Save as `~/.config/systemd/user/trivium.service`:

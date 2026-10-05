@@ -159,6 +159,21 @@ test('sockets: hosts need a valid token, and foreign origins are refused', async
   } finally { await s.close(); }
 });
 
+test('sockets behind a proxy: the forwarded host counts as the same origin', async () => {
+  const s = await boot();
+  try {
+    const open = (headers) => new Promise((resolve) => {
+      const ws = new WebSocket(s.base.replace('http', 'ws') + '/ws', { headers });
+      ws.on('open', () => { ws.close(); resolve(true); });
+      ws.on('error', () => resolve(false));
+      ws.on('unexpected-response', () => resolve(false));
+    });
+    assert.equal(await open({ origin: 'https://trivia.example.com', 'x-forwarded-host': 'trivia.example.com' }), true);
+    assert.equal(await open({ origin: 'https://trivia.example.com', 'x-forwarded-host': 'other.example.com' }), false);
+    assert.equal(await open({ origin: 'not a url' }), false);
+  } finally { await s.close(); }
+});
+
 test('question bank API: validation errors are readable, export and import round-trip', async () => {
   const s = await boot();
   try {

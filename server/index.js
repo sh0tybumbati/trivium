@@ -65,7 +65,13 @@ export function createApp({ db = openDb(':memory:'), env = process.env, distDir 
     const url = new URL(req.url ?? '/', 'http://x');
     const origin = req.headers.origin;
     // Browsers always send Origin; refuse cross-site pages from opening our socket.
-    if (url.pathname !== '/ws' || (origin && new URL(origin).host !== req.headers.host)) {
+    // Behind a proxy the original host may arrive in X-Forwarded-Host instead of Host.
+    const hosts = [req.headers.host, String(req.headers['x-forwarded-host'] ?? '').split(',')[0].trim()].filter(Boolean);
+    let originOk = true;
+    if (origin) {
+      try { originOk = hosts.includes(new URL(origin).host); } catch { originOk = false; }
+    }
+    if (url.pathname !== '/ws' || !originOk) {
       socket.destroy();
       return;
     }
