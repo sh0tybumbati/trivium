@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "description": "Trivia night for a room full of phones: a host console, a big screen, and players.",
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "concurrently -k -n server,web -c yellow,green \"npm:dev:server\" \"npm:dev:web\"",
     "dev:server": "node --watch server/index.js",
@@ -15,6 +17,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@fontsource/josefin-sans": "^5.3.0",
+    "@fontsource/limelight": "^5.3.0",
     "express": "^4.21.2",
     "lucide-react": "^0.468.0",
     "qrcode": "^1.5.4",

@@ -1,0 +1,86 @@
+@import '@fontsource/limelight/400.css';
+@import '@fontsource/josefin-sans/400.css';
+@import '@fontsource/josefin-sans/600.css';
+@import '@fontsource/josefin-sans/700.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root { min-height: 100dvh; }
+  body {
+    @apply bg-ink font-body text-cream antialiased;
+    background-image:
+      radial-gradient(60rem 36rem at 50% -8rem, rgba(20, 87, 74, 0.45), transparent 70%),
+      radial-gradient(40rem 30rem at 110% 100%, rgba(156, 122, 46, 0.12), transparent 70%);
+    background-attachment: fixed;
+  }
+  * { -webkit-tap-highlight-color: transparent; }
+  ::selection { background: rgba(217, 180, 91, 0.35); }
+  input, textarea, select { font: inherit; }
+  :focus-visible { outline: 2px solid #f1d98f; outline-offset: 3px; }
+}
+
+@layer components {
+  /* Chamfered "stepped corner" shape, the Deco signature. */
+  .cut {
+    --cut: 14px;
+    clip-path: polygon(
+      var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)),
+      calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut)
+    );
+  }
+  .frame { @apply cut p-[2px]; background: linear-gradient(135deg, #f1d98f, #9c7a2e 45%, #d9b45b 70%, #f1d98f); }
+  .frame-in { @apply cut h-full w-full bg-panel; --cut: calc(var(--frame-cut, 14px) - 2px); }
+  .frame-jade .frame-in { background: linear-gradient(160deg, #0f2a24, #0a1a16); }
+
+  .btn {
+    @apply cut relative inline-flex select-none items-center justify-center gap-2 px-6 py-3 font-semibold uppercase tracking-[0.14em] transition duration-150;
+    --cut: 10px;
+    background: linear-gradient(180deg, #f1d98f, #d9b45b 55%, #b48f3d);
+    color: #1a1305;
+  }
+  .btn:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); }
+  .btn:active:not(:disabled) { transform: translateY(1px) scale(0.99); }
+  .btn:disabled { @apply cursor-not-allowed opacity-40; }
+  .btn-ghost { background: transparent; color: #f1d98f; box-shadow: inset 0 0 0 2px rgba(217, 180, 91, 0.55); }
+  .btn-ghost:hover:not(:disabled) { background: rgba(217, 180, 91, 0.12); filter: none; }
+  .btn-jade { background: linear-gradient(180deg, #2fbf8f, #14574a); color: #f3ead3; }
+  .btn-danger { background: linear-gradient(180deg, #e8656d, #a82f38); color: #fff; }
+  .btn-sm { @apply px-3.5 py-1.5 text-xs; --cut: 6px; }
+  .btn-lg { @apply px-9 py-4 text-lg; --cut: 14px; }
+
+  .input {
+    @apply w-full border border-gold/40 bg-ink/70 px-4 py-3 text-cream placeholder:text-mute/70;
+  }
+  .input:focus { @apply border-gold-light outline-none; box-shadow: 0 0 0 3px rgba(217, 180, 91, 0.2); }
+  .label { @apply mb-1.5 block text-xs font-semibold uppercase tracking-[0.18em] text-gold/90; }
+
+  .chip { @apply inline-flex items-center gap-1.5 border border-gold/35 px-2.5 py-0.5 text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-gold-light; }
+  .display { @apply font-display; letter-spacing: 0.02em; }
+  /* Limelight's zero looks like a half-moon, so numbers use a clean bold face instead. */
+  .num { @apply font-body font-bold tabular-nums; letter-spacing: 0; }
+  .gold-text {
+    background: linear-gradient(180deg, #f6e3a6, #d9b45b 60%, #a98531);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Sunburst rays fanning up from the bottom edge. */
+  .rays {
+    background: repeating-conic-gradient(from -90deg at 50% 100%, rgba(217, 180, 91, 0.1) 0 2.5deg, transparent 2.5deg 7deg);
+    -webkit-mask-image: radial-gradient(ellipse 70% 100% at 50% 100%, #000, transparent 75%);
+    mask-image: radial-gradient(ellipse 70% 100% at 50% 100%, #000, transparent 75%);
+  }
+  .rays-top {
+    background: repeating-conic-gradient(from 90deg at 50% 0%, rgba(217, 180, 91, 0.1) 0 2.5deg, transparent 2.5deg 7deg);
+    -webkit-mask-image: radial-gradient(ellipse 70% 100% at 50% 0%, #000, transparent 75%);
+    mask-image: radial-gradient(ellipse 70% 100% at 50% 0%, #000, transparent 75%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}
